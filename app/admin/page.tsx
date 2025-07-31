@@ -1,7 +1,19 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ArrowLeft, Calendar, Clock, User, Phone, Trash2, CheckCircle, LogOut, History, Filter } from "lucide-react"
+import {
+  ArrowLeft,
+  Calendar,
+  Clock,
+  User,
+  Phone,
+  Trash2,
+  CheckCircle,
+  LogOut,
+  History,
+  Filter,
+  MessageCircle,
+} from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -15,7 +27,6 @@ interface Turno {
   id: number
   nombre: string
   telefono: string
-  email: string
   fecha: string
   hora: string
   servicio: string
@@ -105,15 +116,39 @@ export default function AdminPage() {
     }
   }
 
-  const confirmarTurno = async (id: number, confirmado: boolean) => {
+  const confirmarTurno = async (id: number, confirmado: boolean, turno: Turno) => {
     try {
       const { error } = await supabase.from("turnos").update({ confirmado: !confirmado }).eq("id", id)
 
       if (error) throw error
 
+      // Si se está confirmando el turno, enviar WhatsApp
+      if (!confirmado) {
+        const mensajeConfirmacion = `✅ *TURNO CONFIRMADO* ✅
+
+Hola ${turno.nombre}! 
+
+Tu turno ha sido confirmado:
+📅 *Fecha:* ${new Date(turno.fecha + "T00:00:00").toLocaleDateString("es-AR", {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })}
+🕐 *Hora:* ${turno.hora}
+✂️ *Servicio:* ${turno.servicio}
+
+¡Te esperamos! 💅✨
+
+*Peluquería Bella*`
+
+        const whatsappUrl = `https://wa.me/${turno.telefono.replace(/\D/g, "")}?text=${encodeURIComponent(mensajeConfirmacion)}`
+        window.open(whatsappUrl, "_blank")
+      }
+
       toast({
-        title: "Estado actualizado",
-        description: "El estado del turno ha sido actualizado.",
+        title: confirmado ? "Turno desconfirmado" : "Turno confirmado",
+        description: confirmado ? "El turno ha sido desconfirmado." : "Se envió WhatsApp de confirmación al cliente.",
       })
       cargarTurnos()
     } catch (error) {
@@ -166,10 +201,11 @@ export default function AdminPage() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => confirmarTurno(turno.id, turno.confirmado || false)}
+                onClick={() => confirmarTurno(turno.id, turno.confirmado || false, turno)}
                 className={turno.confirmado ? "text-green-600" : "text-gray-400"}
+                title={turno.confirmado ? "Desconfirmar turno" : "Confirmar turno (envía WhatsApp)"}
               >
-                <CheckCircle className="h-4 w-4" />
+                {turno.confirmado ? <CheckCircle className="h-4 w-4" /> : <MessageCircle className="h-4 w-4" />}
               </Button>
               <Button
                 variant="ghost"
@@ -187,10 +223,6 @@ export default function AdminPage() {
           <div className="flex items-center gap-2">
             <Phone className="h-4 w-4 text-gray-500" />
             <span>{turno.telefono}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="h-4 w-4 text-gray-500">📧</span>
-            <span>{turno.email}</span>
           </div>
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4 text-gray-500" />

@@ -11,6 +11,7 @@ interface CalendarPickerProps {
   selectedTime: string
   onDateSelect: (date: string) => void
   onTimeSelect: (time: string) => void
+  showErrors?: boolean
 }
 
 const horarios = [
@@ -35,6 +36,7 @@ export default function CalendarPicker({
   selectedTime,
   onDateSelect,
   onTimeSelect,
+  showErrors = false,
 }: CalendarPickerProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [turnosOcupados, setTurnosOcupados] = useState<{ [key: string]: string[] }>({})
@@ -72,31 +74,35 @@ export default function CalendarPicker({
     const startingDayOfWeek = firstDay.getDay()
 
     const days = []
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
 
     // Días vacíos al inicio
     for (let i = 0; i < startingDayOfWeek; i++) {
-      days.push(null)
+      days.push({ day: null, disabled: true, isPast: false, isSunday: false })
     }
 
     // Días del mes
     for (let day = 1; day <= daysInMonth; day++) {
       const currentDate = new Date(year, month, day)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
+      const isPast = currentDate < today
+      const isSunday = currentDate.getDay() === 0
+      const disabled = isPast || isSunday
 
-      // Solo mostrar días futuros y excluir domingos
-      if (currentDate >= today && currentDate.getDay() !== 0) {
-        days.push(day)
-      } else {
-        days.push(null)
-      }
+      days.push({
+        day: day,
+        disabled: disabled,
+        isPast: isPast,
+        isSunday: isSunday,
+      })
     }
 
     return days
   }
 
   const formatDateForComparison = (year: number, month: number, day: number) => {
-    return new Date(year, month, day).toISOString().split("T")[0]
+    const date = new Date(year, month, day)
+    return date.toISOString().split("T")[0]
   }
 
   const nextMonth = () => {
@@ -137,7 +143,9 @@ export default function CalendarPicker({
     <div className="space-y-6">
       {/* Calendar */}
       <Card>
-        <CardHeader className="bg-blue-600 text-white">
+        <CardHeader
+          className={`bg-blue-600 text-white ${showErrors && !selectedDate ? "border-b-2 border-red-500" : ""}`}
+        >
           <CardTitle className="flex items-center justify-between">
             <Button variant="ghost" size="icon" onClick={prevMonth} className="text-white hover:bg-blue-700">
               <ChevronLeft className="h-4 w-4" />
@@ -162,27 +170,52 @@ export default function CalendarPicker({
 
           {/* Calendar days */}
           <div className="grid grid-cols-7 gap-1">
-            {days.map((day, index) => {
-              if (day === null) {
+            {days.map((dayInfo, index) => {
+              if (dayInfo.day === null) {
                 return <div key={index} className="h-10" />
               }
 
-              const dateString = formatDateForComparison(currentMonth.getFullYear(), currentMonth.getMonth(), day)
+              const dateString = formatDateForComparison(
+                currentMonth.getFullYear(),
+                currentMonth.getMonth(),
+                dayInfo.day,
+              )
               const isSelected = selectedDate === dateString
 
               return (
                 <Button
-                  key={day}
+                  key={dayInfo.day}
                   variant={isSelected ? "default" : "ghost"}
+                  disabled={dayInfo.disabled}
                   className={`h-10 w-full text-sm ${
-                    isSelected ? "bg-blue-600 text-white hover:bg-blue-700" : "hover:bg-blue-50"
+                    isSelected
+                      ? "bg-blue-600 text-white hover:bg-blue-700"
+                      : dayInfo.disabled
+                        ? dayInfo.isSunday
+                          ? "text-red-400 cursor-not-allowed bg-red-50"
+                          : "text-gray-300 cursor-not-allowed"
+                        : "hover:bg-blue-50"
                   }`}
-                  onClick={() => onDateSelect(dateString)}
+                  onClick={() => !dayInfo.disabled && onDateSelect(dateString)}
                 >
-                  {day}
+                  {dayInfo.day}
+                  {dayInfo.isSunday && !dayInfo.isPast && <span className="ml-1 text-xs">🚫</span>}
                 </Button>
               )
             })}
+          </div>
+          {showErrors && !selectedDate && <p className="text-red-500 text-sm mt-2">Debes seleccionar una fecha</p>}
+
+          {/* Legend */}
+          <div className="mt-3 text-xs text-gray-500 space-y-1">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-red-50 border border-red-200 rounded"></div>
+              <span>Domingos (cerrado)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-gray-100 border border-gray-200 rounded"></div>
+              <span>Días pasados</span>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -190,7 +223,9 @@ export default function CalendarPicker({
       {/* Time slots */}
       {selectedDate && (
         <Card>
-          <CardHeader className="bg-slate-800 text-white">
+          <CardHeader
+            className={`bg-slate-800 text-white ${showErrors && !selectedTime ? "border-b-2 border-red-500" : ""}`}
+          >
             <CardTitle className="flex items-center gap-2">
               <Clock className="h-5 w-5" />
               Horarios Disponibles
@@ -225,6 +260,7 @@ export default function CalendarPicker({
             {turnosOcupados[selectedDate]?.length > 0 && (
               <p className="text-sm text-red-600 mt-2 text-center">❌ Los horarios en rojo ya están ocupados</p>
             )}
+            {showErrors && !selectedTime && <p className="text-red-500 text-sm mt-2">Debes seleccionar una hora</p>}
           </CardContent>
         </Card>
       )}

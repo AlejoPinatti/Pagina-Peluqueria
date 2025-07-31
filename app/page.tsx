@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
-import { Calendar, User, Phone, MessageCircle, Mail, Scissors } from "lucide-react"
+import { Calendar, User, Phone, MessageCircle, Scissors } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -21,44 +21,28 @@ export default function ReservarPage() {
   const [formData, setFormData] = useState({
     nombre: "",
     telefono: "",
-    email: "",
     fecha: "",
     hora: "",
     servicio: "",
     comentarios: "",
   })
   const [loading, setLoading] = useState(false)
-  const [errors, setErrors] = useState<string[]>([])
+  const [showErrors, setShowErrors] = useState(false)
   const { toast } = useToast()
 
   const validateForm = () => {
-    const newErrors = []
-
-    if (!formData.nombre.trim()) newErrors.push("Nombre completo es requerido")
-    if (!formData.telefono.trim()) newErrors.push("Teléfono es requerido")
-    if (!formData.email.trim()) newErrors.push("Email es requerido")
-    if (!formData.fecha) newErrors.push("Fecha es requerida")
-    if (!formData.hora) newErrors.push("Hora es requerida")
-    if (!formData.servicio) newErrors.push("Servicio es requerido")
-
-    // Validar formato de email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (formData.email && !emailRegex.test(formData.email)) {
-      newErrors.push("Email debe tener un formato válido")
-    }
-
-    setErrors(newErrors)
-    return newErrors.length === 0
+    return formData.nombre.trim() && formData.telefono.trim() && formData.fecha && formData.hora && formData.servicio
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setShowErrors(true)
 
     // Validar formulario
     if (!validateForm()) {
       toast({
         title: "Información incompleta",
-        description: "Por favor completa todos los campos requeridos correctamente.",
+        description: "Por favor completa todos los campos requeridos.",
         variant: "destructive",
       })
       return
@@ -91,7 +75,6 @@ export default function ReservarPage() {
         {
           nombre: formData.nombre,
           telefono: formData.telefono,
-          email: formData.email,
           fecha: formData.fecha,
           hora: formData.hora,
           servicio: formData.servicio,
@@ -107,7 +90,6 @@ export default function ReservarPage() {
 
 👤 *Cliente:* ${formData.nombre}
 📞 *Teléfono:* ${formData.telefono}
-📧 *Email:* ${formData.email}
 📅 *Fecha:* ${new Date(formData.fecha + "T00:00:00").toLocaleDateString("es-AR", {
         weekday: "long",
         year: "numeric",
@@ -120,27 +102,6 @@ export default function ReservarPage() {
 
 ¡Confirma la disponibilidad! 💅`
 
-      // Simular envío de email
-      const emailData = {
-        to: "peluqueriabella@gmail.com",
-        subject: `Nuevo turno reservado - ${formData.nombre}`,
-        body: `
-          NUEVO TURNO RESERVADO
-          
-          Cliente: ${formData.nombre}
-          Teléfono: ${formData.telefono}
-          Email: ${formData.email}
-          Fecha: ${new Date(formData.fecha + "T00:00:00").toLocaleDateString("es-AR")}
-          Hora: ${formData.hora}
-          Servicio: ${formData.servicio}
-          Comentarios: ${formData.comentarios || "Ninguno"}
-          
-          Fecha de reserva: ${new Date().toLocaleString("es-AR")}
-        `,
-      }
-
-      console.log("Email enviado:", emailData)
-
       toast({
         title: "¡Turno reservado exitosamente!",
         description: "Te contactaremos pronto para confirmar tu cita.",
@@ -150,17 +111,16 @@ export default function ReservarPage() {
       const whatsappUrl = `https://wa.me/5491123456789?text=${encodeURIComponent(mensajeWhatsApp)}`
       window.open(whatsappUrl, "_blank")
 
-      // Limpiar formulario y errores
+      // Limpiar formulario
       setFormData({
         nombre: "",
         telefono: "",
-        email: "",
         fecha: "",
         hora: "",
         servicio: "",
         comentarios: "",
       })
-      setErrors([])
+      setShowErrors(false)
     } catch (error) {
       console.error("Error:", error)
       toast({
@@ -175,9 +135,24 @@ export default function ReservarPage() {
 
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
-    // Limpiar errores cuando el usuario empiece a escribir
-    if (errors.length > 0) {
-      setErrors([])
+  }
+
+  const getFieldError = (field: string) => {
+    if (!showErrors) return false
+
+    switch (field) {
+      case "nombre":
+        return !formData.nombre.trim()
+      case "telefono":
+        return !formData.telefono.trim()
+      case "fecha":
+        return !formData.fecha
+      case "hora":
+        return !formData.hora
+      case "servicio":
+        return !formData.servicio
+      default:
+        return false
     }
   }
 
@@ -205,18 +180,6 @@ export default function ReservarPage() {
           </CardHeader>
           <CardContent className="p-6">
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Mostrar errores solo después de intentar enviar */}
-              {errors.length > 0 && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                  <h4 className="text-red-800 font-medium mb-2">Por favor corrige los siguientes errores:</h4>
-                  <ul className="text-red-700 text-sm space-y-1">
-                    {errors.map((error, index) => (
-                      <li key={index}>• {error}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
               {/* Nombre */}
               <div className="space-y-2">
                 <Label htmlFor="nombre" className="flex items-center gap-2">
@@ -228,8 +191,9 @@ export default function ReservarPage() {
                   value={formData.nombre}
                   onChange={(e) => handleChange("nombre", e.target.value)}
                   placeholder="Tu nombre completo"
-                  className="text-lg py-3"
+                  className={`text-lg py-3 ${getFieldError("nombre") ? "border-red-500" : ""}`}
                 />
+                {getFieldError("nombre") && <p className="text-red-500 text-sm">El nombre es requerido</p>}
               </div>
 
               {/* Teléfono */}
@@ -244,24 +208,9 @@ export default function ReservarPage() {
                   value={formData.telefono}
                   onChange={(e) => handleChange("telefono", e.target.value)}
                   placeholder="Tu número de teléfono"
-                  className="text-lg py-3"
+                  className={`text-lg py-3 ${getFieldError("telefono") ? "border-red-500" : ""}`}
                 />
-              </div>
-
-              {/* Email */}
-              <div className="space-y-2">
-                <Label htmlFor="email" className="flex items-center gap-2">
-                  <Mail className="h-4 w-4" />
-                  Email *
-                </Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => handleChange("email", e.target.value)}
-                  placeholder="tu@email.com"
-                  className="text-lg py-3"
-                />
+                {getFieldError("telefono") && <p className="text-red-500 text-sm">El teléfono es requerido</p>}
               </div>
 
               {/* Calendario */}
@@ -271,6 +220,7 @@ export default function ReservarPage() {
                   selectedTime={formData.hora}
                   onDateSelect={(date) => handleChange("fecha", date)}
                   onTimeSelect={(time) => handleChange("hora", time)}
+                  showErrors={showErrors}
                 />
               </div>
 
@@ -278,7 +228,7 @@ export default function ReservarPage() {
               <div className="space-y-2">
                 <Label htmlFor="servicio">Servicio *</Label>
                 <Select value={formData.servicio} onValueChange={(value) => handleChange("servicio", value)}>
-                  <SelectTrigger className="text-lg py-3">
+                  <SelectTrigger className={`text-lg py-3 ${getFieldError("servicio") ? "border-red-500" : ""}`}>
                     <SelectValue placeholder="¿Qué servicio necesitas?" />
                   </SelectTrigger>
                   <SelectContent>
@@ -289,6 +239,7 @@ export default function ReservarPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                {getFieldError("servicio") && <p className="text-red-500 text-sm">Debes seleccionar un servicio</p>}
               </div>
 
               {/* Comentarios */}
@@ -327,7 +278,7 @@ export default function ReservarPage() {
         <Card className="bg-blue-50 border-blue-200">
           <CardContent className="p-4">
             <p className="text-blue-800 text-sm text-center">
-              📱 Después de reservar, se abrirá WhatsApp automáticamente y recibirás un email de confirmación
+              📱 Después de reservar, se abrirá WhatsApp automáticamente para confirmar tu turno
             </p>
           </CardContent>
         </Card>

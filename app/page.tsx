@@ -188,6 +188,7 @@ export default function ReservarPage() {
                 </Label>
                 <Input
                   id="nombre"
+                  name="nombre"
                   value={formData.nombre}
                   onChange={(e) => handleChange("nombre", e.target.value)}
                   placeholder="Tu nombre completo"
@@ -205,6 +206,7 @@ export default function ReservarPage() {
                 <Input
                   id="telefono"
                   type="tel"
+                  name="telefono"
                   value={formData.telefono}
                   onChange={(e) => handleChange("telefono", e.target.value)}
                   placeholder="Tu número de teléfono"
@@ -247,6 +249,7 @@ export default function ReservarPage() {
                 <Label htmlFor="comentarios">Comentarios (opcional)</Label>
                 <Textarea
                   id="comentarios"
+                  name="comentarios"
                   value={formData.comentarios}
                   onChange={(e) => handleChange("comentarios", e.target.value)}
                   placeholder="Algún detalle especial o preferencia..."

@@ -45,12 +45,19 @@ export default function AdminPage() {
   const router = useRouter()
 
   useEffect(() => {
+    console.log("🔐 Verificando autenticación admin...")
+
     // Verificar autenticación
     const auth = localStorage.getItem("adminAuth")
+    console.log("🔑 Auth status:", auth)
+
     if (auth !== "true") {
+      console.log("❌ No autenticado, redirigiendo a login...")
       router.push("/login")
       return
     }
+
+    console.log("✅ Autenticado, cargando turnos...")
     setIsAuthenticated(true)
     cargarTurnos()
 
@@ -58,6 +65,7 @@ export default function AdminPage() {
     const subscription = supabase
       .channel("turnos_changes")
       .on("postgres_changes", { event: "*", schema: "public", table: "turnos" }, () => {
+        console.log("🔄 Cambio detectado en turnos, recargando...")
         cargarTurnos()
       })
       .subscribe()
@@ -69,17 +77,26 @@ export default function AdminPage() {
 
   const cargarTurnos = async () => {
     try {
+      console.log("📊 Cargando turnos desde Supabase...")
       const { data, error } = await supabase
         .from("turnos")
         .select("*")
         .order("fecha", { ascending: true })
         .order("hora", { ascending: true })
 
-      if (error) throw error
+      if (error) {
+        console.error("❌ Error cargando turnos:", error)
+        throw error
+      }
+
+      console.log("✅ Turnos cargados:", data)
 
       const hoy = new Date().toISOString().split("T")[0]
       const turnosActivos = data?.filter((turno) => turno.fecha >= hoy) || []
       const turnosPasados = data?.filter((turno) => turno.fecha < hoy) || []
+
+      console.log("📅 Turnos activos:", turnosActivos.length)
+      console.log("📜 Turnos pasados:", turnosPasados.length)
 
       setTurnos(turnosActivos)
       setTurnosHistorial(turnosPasados)
@@ -97,6 +114,7 @@ export default function AdminPage() {
 
   const eliminarTurno = async (id: number) => {
     try {
+      console.log("🗑️ Eliminando turno:", id)
       const { error } = await supabase.from("turnos").delete().eq("id", id)
 
       if (error) throw error
@@ -118,6 +136,7 @@ export default function AdminPage() {
 
   const confirmarTurno = async (id: number, confirmado: boolean, turno: Turno) => {
     try {
+      console.log("✅ Confirmando turno:", id, !confirmado)
       const { error } = await supabase.from("turnos").update({ confirmado: !confirmado }).eq("id", id)
 
       if (error) throw error
@@ -162,6 +181,7 @@ Tu turno ha sido confirmado:
   }
 
   const cerrarSesion = () => {
+    console.log("🚪 Cerrando sesión admin...")
     localStorage.removeItem("adminAuth")
     router.push("/")
   }
@@ -169,7 +189,10 @@ Tu turno ha sido confirmado:
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 to-blue-900 flex items-center justify-center text-white">
-        Verificando acceso...
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+          <p>Verificando acceso...</p>
+        </div>
       </div>
     )
   }
@@ -177,7 +200,10 @@ Tu turno ha sido confirmado:
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 to-blue-900 flex items-center justify-center text-white">
-        Cargando turnos...
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+          <p>Cargando turnos...</p>
+        </div>
       </div>
     )
   }

@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { Calendar, User, Phone, MessageCircle, Scissors } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -27,19 +27,68 @@ export default function ReservarPage() {
     comentarios: "",
   })
   const [loading, setLoading] = useState(false)
-  const [showErrors, setShowErrors] = useState(false)
+  const [errors, setErrors] = useState<{ [key: string]: string }>({})
   const { toast } = useToast()
 
+  // Referencias para hacer scroll a los campos con error
+  const nombreRef = useRef<HTMLInputElement>(null)
+  const telefonoRef = useRef<HTMLInputElement>(null)
+  const fechaRef = useRef<HTMLDivElement>(null)
+  const servicioRef = useRef<HTMLDivElement>(null)
+
   const validateForm = () => {
-    return formData.nombre.trim() && formData.telefono.trim() && formData.fecha && formData.hora && formData.servicio
+    const newErrors: { [key: string]: string } = {}
+
+    if (!formData.nombre.trim()) {
+      newErrors.nombre = "El nombre es requerido"
+    }
+
+    if (!formData.telefono.trim()) {
+      newErrors.telefono = "El teléfono es requerido"
+    }
+
+    if (!formData.fecha) {
+      newErrors.fecha = "Debes seleccionar una fecha"
+    }
+
+    if (!formData.hora) {
+      newErrors.hora = "Debes seleccionar una hora"
+    }
+
+    if (!formData.servicio) {
+      newErrors.servicio = "Debes seleccionar un servicio"
+    }
+
+    setErrors(newErrors)
+
+    // Hacer scroll al primer campo con error
+    if (Object.keys(newErrors).length > 0) {
+      setTimeout(() => {
+        if (newErrors.nombre && nombreRef.current) {
+          nombreRef.current.scrollIntoView({ behavior: "smooth", block: "center" })
+          nombreRef.current.focus()
+        } else if (newErrors.telefono && telefonoRef.current) {
+          telefonoRef.current.scrollIntoView({ behavior: "smooth", block: "center" })
+          telefonoRef.current.focus()
+        } else if (newErrors.fecha && fechaRef.current) {
+          fechaRef.current.scrollIntoView({ behavior: "smooth", block: "center" })
+        } else if (newErrors.servicio && servicioRef.current) {
+          servicioRef.current.scrollIntoView({ behavior: "smooth", block: "center" })
+        }
+      }, 100)
+    }
+
+    return Object.keys(newErrors).length === 0
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setShowErrors(true)
 
-    // Validar formulario
+    console.log("🔥 BOTÓN RESERVAR PRESIONADO - Iniciando validación...")
+
+    // SOLO AQUÍ SE VALIDA - cuando presiona el botón
     if (!validateForm()) {
+      console.log("❌ Validación falló:", errors)
       toast({
         title: "Información incompleta",
         description: "Por favor completa todos los campos requeridos.",
@@ -48,10 +97,11 @@ export default function ReservarPage() {
       return
     }
 
+    console.log("✅ Validación exitosa - Procediendo a guardar...")
     setLoading(true)
 
     try {
-      // Verificar si el horario ya está ocupado
+      // Verificar si el horario está ocupado
       const { data: turnosExistentes, error: errorConsulta } = await supabase
         .from("turnos")
         .select("*")
@@ -63,12 +113,14 @@ export default function ReservarPage() {
       if (turnosExistentes && turnosExistentes.length > 0) {
         toast({
           title: "Horario no disponible",
-          description: "Este horario ya está ocupado. Por favor selecciona otro.",
+          description: "Este horario acaba de ser ocupado por otro cliente. Por favor selecciona otro.",
           variant: "destructive",
         })
         setLoading(false)
         return
       }
+
+      console.log("💾 Guardando en base de datos...")
 
       // Guardar en Supabase
       const { data, error } = await supabase.from("turnos").insert([
@@ -84,6 +136,8 @@ export default function ReservarPage() {
       ])
 
       if (error) throw error
+
+      console.log("✅ Turno guardado exitosamente!")
 
       // Mensaje para WhatsApp
       const mensajeWhatsApp = `🌟 *NUEVO TURNO RESERVADO* 🌟
@@ -107,11 +161,13 @@ export default function ReservarPage() {
         description: "Te contactaremos pronto para confirmar tu cita.",
       })
 
+      console.log("📱 Abriendo WhatsApp...")
+
       // Abrir WhatsApp
       const whatsappUrl = `https://wa.me/5491123456789?text=${encodeURIComponent(mensajeWhatsApp)}`
       window.open(whatsappUrl, "_blank")
 
-      // Limpiar formulario
+      // Limpiar formulario y errores
       setFormData({
         nombre: "",
         telefono: "",
@@ -120,9 +176,9 @@ export default function ReservarPage() {
         servicio: "",
         comentarios: "",
       })
-      setShowErrors(false)
+      setErrors({})
     } catch (error) {
-      console.error("Error:", error)
+      console.error("❌ Error:", error)
       toast({
         title: "Error",
         description: "Hubo un problema al reservar tu turno. Intenta nuevamente.",
@@ -133,27 +189,11 @@ export default function ReservarPage() {
     }
   }
 
+  // SOLO actualizar formData - NO hacer nada más
   const handleChange = (field: string, value: string) => {
+    console.log(`📝 Actualizando ${field}:`, value)
     setFormData((prev) => ({ ...prev, [field]: value }))
-  }
-
-  const getFieldError = (field: string) => {
-    if (!showErrors) return false
-
-    switch (field) {
-      case "nombre":
-        return !formData.nombre.trim()
-      case "telefono":
-        return !formData.telefono.trim()
-      case "fecha":
-        return !formData.fecha
-      case "hora":
-        return !formData.hora
-      case "servicio":
-        return !formData.servicio
-      default:
-        return false
-    }
+    // NO validar, NO limpiar errores, NO hacer nada más
   }
 
   return (
@@ -187,14 +227,19 @@ export default function ReservarPage() {
                   Nombre completo *
                 </Label>
                 <Input
+                  ref={nombreRef}
                   id="nombre"
                   name="nombre"
                   value={formData.nombre}
                   onChange={(e) => handleChange("nombre", e.target.value)}
                   placeholder="Tu nombre completo"
-                  className={`text-lg py-3 ${getFieldError("nombre") ? "border-red-500" : ""}`}
+                  className={`text-lg py-3 transition-all duration-200 ${
+                    errors.nombre ? "border-red-500 bg-red-50 shake" : ""
+                  }`}
                 />
-                {getFieldError("nombre") && <p className="text-red-500 text-sm">El nombre es requerido</p>}
+                {errors.nombre && (
+                  <p className="text-red-500 text-sm animate-pulse flex items-center gap-1">⚠️ {errors.nombre}</p>
+                )}
               </div>
 
               {/* Teléfono */}
@@ -204,33 +249,43 @@ export default function ReservarPage() {
                   Teléfono *
                 </Label>
                 <Input
+                  ref={telefonoRef}
                   id="telefono"
                   type="tel"
                   name="telefono"
                   value={formData.telefono}
                   onChange={(e) => handleChange("telefono", e.target.value)}
                   placeholder="Tu número de teléfono"
-                  className={`text-lg py-3 ${getFieldError("telefono") ? "border-red-500" : ""}`}
+                  className={`text-lg py-3 transition-all duration-200 ${
+                    errors.telefono ? "border-red-500 bg-red-50 shake" : ""
+                  }`}
                 />
-                {getFieldError("telefono") && <p className="text-red-500 text-sm">El teléfono es requerido</p>}
+                {errors.telefono && (
+                  <p className="text-red-500 text-sm animate-pulse flex items-center gap-1">⚠️ {errors.telefono}</p>
+                )}
               </div>
 
               {/* Calendario */}
-              <div className="space-y-2">
+              <div ref={fechaRef} className="space-y-2">
                 <CalendarPicker
                   selectedDate={formData.fecha}
                   selectedTime={formData.hora}
                   onDateSelect={(date) => handleChange("fecha", date)}
                   onTimeSelect={(time) => handleChange("hora", time)}
-                  showErrors={showErrors}
+                  dateError={errors.fecha}
+                  timeError={errors.hora}
                 />
               </div>
 
               {/* Servicio */}
-              <div className="space-y-2">
+              <div ref={servicioRef} className="space-y-2">
                 <Label htmlFor="servicio">Servicio *</Label>
                 <Select value={formData.servicio} onValueChange={(value) => handleChange("servicio", value)}>
-                  <SelectTrigger className={`text-lg py-3 ${getFieldError("servicio") ? "border-red-500" : ""}`}>
+                  <SelectTrigger
+                    className={`text-lg py-3 transition-all duration-200 ${
+                      errors.servicio ? "border-red-500 bg-red-50 shake" : ""
+                    }`}
+                  >
                     <SelectValue placeholder="¿Qué servicio necesitas?" />
                   </SelectTrigger>
                   <SelectContent>
@@ -241,7 +296,9 @@ export default function ReservarPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                {getFieldError("servicio") && <p className="text-red-500 text-sm">Debes seleccionar un servicio</p>}
+                {errors.servicio && (
+                  <p className="text-red-500 text-sm animate-pulse flex items-center gap-1">⚠️ {errors.servicio}</p>
+                )}
               </div>
 
               {/* Comentarios */}
@@ -262,10 +319,13 @@ export default function ReservarPage() {
               <Button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 text-lg mt-6"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 text-lg mt-6 transition-all duration-200"
               >
                 {loading ? (
-                  "Reservando..."
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                    Reservando...
+                  </>
                 ) : (
                   <>
                     <MessageCircle className="h-5 w-5 mr-2" />
@@ -293,6 +353,17 @@ export default function ReservarPage() {
           </Link>
         </div>
       </div>
+
+      <style jsx>{`
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-5px); }
+          75% { transform: translateX(5px); }
+        }
+        .shake {
+          animation: shake 0.5s ease-in-out;
+        }
+      `}</style>
     </div>
   )
 }

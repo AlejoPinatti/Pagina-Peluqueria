@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ChevronLeft, ChevronRight, Clock } from "lucide-react"
+import { ChevronLeft, ChevronRight, Clock, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { supabase } from "@/lib/supabase"
@@ -11,7 +11,8 @@ interface CalendarPickerProps {
   selectedTime: string
   onDateSelect: (date: string) => void
   onTimeSelect: (time: string) => void
-  showErrors?: boolean
+  dateError?: string
+  timeError?: string
 }
 
 const horarios = [
@@ -36,32 +37,53 @@ export default function CalendarPicker({
   selectedTime,
   onDateSelect,
   onTimeSelect,
-  showErrors = false,
+  dateError,
+  timeError,
 }: CalendarPickerProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [turnosOcupados, setTurnosOcupados] = useState<{ [key: string]: string[] }>({})
+  const [loadingHorarios, setLoadingHorarios] = useState(false)
 
   useEffect(() => {
     cargarTurnosOcupados()
   }, [])
 
+  // Recargar horarios cuando cambia la fecha seleccionada
+  useEffect(() => {
+    if (selectedDate) {
+      cargarTurnosOcupados()
+    }
+  }, [selectedDate])
+
   const cargarTurnosOcupados = async () => {
+    setLoadingHorarios(true)
     try {
+      console.log("🔍 Cargando turnos ocupados...")
       const { data: turnos, error } = await supabase.from("turnos").select("fecha, hora")
 
-      if (error) throw error
+      if (error) {
+        console.error("❌ Error consultando turnos:", error)
+        throw error
+      }
+
+      console.log("📊 Turnos encontrados:", turnos)
 
       const ocupados: { [key: string]: string[] } = {}
       turnos?.forEach((turno) => {
         if (!ocupados[turno.fecha]) {
           ocupados[turno.fecha] = []
         }
-        ocupados[turno.fecha].push(turno.hora)
+        // ARREGLO CLAVE: Normalizar formato de hora (quitar segundos)
+        const horaNormalizada = turno.hora.substring(0, 5) // "16:00:00" → "16:00"
+        ocupados[turno.fecha].push(horaNormalizada)
       })
 
+      console.log("🔴 Horarios ocupados NORMALIZADOS por fecha:", ocupados)
       setTurnosOcupados(ocupados)
     } catch (error) {
       console.error("Error cargando turnos ocupados:", error)
+    } finally {
+      setLoadingHorarios(false)
     }
   }
 
@@ -119,7 +141,27 @@ export default function CalendarPicker({
 
   const isHorarioOcupado = (hora: string) => {
     if (!selectedDate) return false
-    return turnosOcupados[selectedDate]?.includes(hora) || false
+    const ocupadosEnFecha = turnosOcupados[selectedDate] || []
+    const ocupado = ocupadosEnFecha.includes(hora)
+
+    console.log(`🕐 Verificando ${hora} en ${selectedDate}:`)
+    console.log(`   - Ocupados en fecha: [${ocupadosEnFecha.join(", ")}]`)
+    console.log(`   - ¿${hora} está ocupado? ${ocupado ? "🔴 SÍ" : "✅ NO"}`)
+
+    return ocupado
+  }
+
+  // FUNCIÓN CLAVE: Solo seleccionar horario SI NO ESTÁ OCUPADO
+  const handleTimeSelect = (hora: string) => {
+    const ocupado = isHorarioOcupado(hora)
+
+    if (ocupado) {
+      console.log(`🚫 HORARIO ${hora} OCUPADO - NO SELECCIONAR`)
+      return // NO hacer nada si está ocupado
+    }
+
+    console.log(`⏰ SELECCIONANDO HORARIO DISPONIBLE: ${hora}`)
+    onTimeSelect(hora)
   }
 
   const days = getDaysInMonth(currentMonth)
@@ -144,7 +186,9 @@ export default function CalendarPicker({
       {/* Calendar */}
       <Card>
         <CardHeader
-          className={`bg-blue-600 text-white ${showErrors && !selectedDate ? "border-b-2 border-red-500" : ""}`}
+          className={`bg-blue-600 text-white transition-all duration-200 ${
+            dateError ? "border-b-4 border-red-500 bg-red-600" : ""
+          }`}
         >
           <CardTitle className="flex items-center justify-between">
             <Button variant="ghost" size="icon" onClick={prevMonth} className="text-white hover:bg-blue-700">
@@ -187,16 +231,21 @@ export default function CalendarPicker({
                   key={dayInfo.day}
                   variant={isSelected ? "default" : "ghost"}
                   disabled={dayInfo.disabled}
-                  className={`h-10 w-full text-sm ${
+                  className={`h-10 w-full text-sm transition-all duration-200 ${
                     isSelected
-                      ? "bg-blue-600 text-white hover:bg-blue-700"
+                      ? "bg-blue-600 text-white hover:bg-blue-700 ring-2 ring-blue-300"
                       : dayInfo.disabled
                         ? dayInfo.isSunday
                           ? "text-red-400 cursor-not-allowed bg-red-50"
                           : "text-gray-300 cursor-not-allowed"
-                        : "hover:bg-blue-50"
+                        : "hover:bg-blue-50 hover:scale-105"
                   }`}
-                  onClick={() => !dayInfo.disabled && onDateSelect(dateString)}
+                  onClick={() => {
+                    if (!dayInfo.disabled) {
+                      console.log(`📅 SELECCIONANDO FECHA: ${dateString}`)
+                      onDateSelect(dateString)
+                    }
+                  }}
                 >
                   {dayInfo.day}
                   {dayInfo.isSunday && !dayInfo.isPast && <span className="ml-1 text-xs">🚫</span>}
@@ -204,7 +253,12 @@ export default function CalendarPicker({
               )
             })}
           </div>
-          {showErrors && !selectedDate && <p className="text-red-500 text-sm mt-2">Debes seleccionar una fecha</p>}
+
+          {dateError && (
+            <div className="mt-3 p-2 bg-red-50 border border-red-200 rounded-md">
+              <p className="text-red-600 text-sm animate-pulse flex items-center gap-1">⚠️ {dateError}</p>
+            </div>
+          )}
 
           {/* Legend */}
           <div className="mt-3 text-xs text-gray-500 space-y-1">
@@ -224,43 +278,120 @@ export default function CalendarPicker({
       {selectedDate && (
         <Card>
           <CardHeader
-            className={`bg-slate-800 text-white ${showErrors && !selectedTime ? "border-b-2 border-red-500" : ""}`}
+            className={`bg-slate-800 text-white transition-all duration-200 ${
+              timeError ? "border-b-4 border-red-500 bg-red-600" : ""
+            }`}
           >
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5" />
-              Horarios Disponibles
+            <CardTitle className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Horarios Disponibles
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={cargarTurnosOcupados}
+                disabled={loadingHorarios}
+                className="text-white hover:bg-slate-700"
+                title="Actualizar disponibilidad"
+              >
+                <RefreshCw className={`h-4 w-4 ${loadingHorarios ? "animate-spin" : ""}`} />
+              </Button>
             </CardTitle>
           </CardHeader>
           <CardContent className="p-4">
+            {loadingHorarios && (
+              <div className="text-center py-4">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                <p className="text-sm text-gray-500">Verificando disponibilidad...</p>
+              </div>
+            )}
+
             <div className="grid grid-cols-3 gap-2">
               {horarios.map((hora) => {
                 const ocupado = isHorarioOcupado(hora)
                 const seleccionado = selectedTime === hora
 
-                return (
-                  <Button
-                    key={hora}
-                    variant={seleccionado ? "default" : ocupado ? "destructive" : "outline"}
-                    className={`py-3 ${
-                      seleccionado
-                        ? "bg-blue-600 text-white hover:bg-blue-700"
-                        : ocupado
-                          ? "bg-red-500 text-white cursor-not-allowed hover:bg-red-500"
-                          : "hover:bg-slate-50"
-                    }`}
-                    onClick={() => !ocupado && onTimeSelect(hora)}
-                    disabled={ocupado}
-                  >
-                    {hora}
-                    {ocupado && <span className="ml-1 text-xs">❌</span>}
-                  </Button>
-                )
+                console.log(`🎨 Renderizando ${hora}: ocupado=${ocupado}, seleccionado=${seleccionado}`)
+
+                if (ocupado) {
+                  // BOTÓN OCUPADO - FORZAR ROJO
+                  return (
+                    <Button
+                      key={hora}
+                      disabled={true}
+                      className="py-3 bg-red-600 text-white cursor-not-allowed hover:bg-red-600 border-red-600 font-medium"
+                      onClick={() => handleTimeSelect(hora)}
+                    >
+                      {hora} 🚫
+                    </Button>
+                  )
+                } else if (seleccionado) {
+                  // BOTÓN SELECCIONADO - AZUL
+                  return (
+                    <Button
+                      key={hora}
+                      className="py-3 bg-blue-600 text-white hover:bg-blue-700 ring-2 ring-blue-300 scale-105 font-medium"
+                      onClick={() => handleTimeSelect(hora)}
+                    >
+                      {hora}
+                    </Button>
+                  )
+                } else {
+                  // BOTÓN DISPONIBLE - BLANCO
+                  return (
+                    <Button
+                      key={hora}
+                      variant="outline"
+                      className="py-3 bg-white border-gray-300 hover:bg-slate-50 hover:scale-105 hover:border-blue-300 font-medium"
+                      onClick={() => handleTimeSelect(hora)}
+                    >
+                      {hora}
+                    </Button>
+                  )
+                }
               })}
             </div>
-            {turnosOcupados[selectedDate]?.length > 0 && (
-              <p className="text-sm text-red-600 mt-2 text-center">❌ Los horarios en rojo ya están ocupados</p>
+
+            {/* Debug info MEJORADO */}
+            <div className="mt-2 p-2 bg-gray-100 rounded text-xs">
+              <p>📅 Fecha seleccionada: {selectedDate}</p>
+              <p>⏰ Hora seleccionada: {selectedTime || "Ninguna"}</p>
+              <p>🔴 Ocupados esta fecha: {turnosOcupados[selectedDate]?.join(", ") || "Ninguno"}</p>
+              <p>📊 Total ocupados: {turnosOcupados[selectedDate]?.length || 0}</p>
+            </div>
+
+            {timeError && (
+              <div className="mt-3 p-2 bg-red-50 border border-red-200 rounded-md">
+                <p className="text-red-600 text-sm animate-pulse flex items-center gap-1">⚠️ {timeError}</p>
+              </div>
             )}
-            {showErrors && !selectedTime && <p className="text-red-500 text-sm mt-2">Debes seleccionar una hora</p>}
+
+            {/* Estadísticas de disponibilidad */}
+            {selectedDate && (
+              <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded-md">
+                <p className="text-xs text-blue-700 text-center">
+                  📊 Disponibles: {horarios.length - (turnosOcupados[selectedDate]?.length || 0)} de {horarios.length}{" "}
+                  horarios
+                </p>
+              </div>
+            )}
+
+            {/* Leyenda visual */}
+            <div className="mt-3 text-xs text-gray-500 space-y-1">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-red-600 rounded"></div>
+                <span>Horarios ocupados</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-blue-600 rounded"></div>
+                <span>Horario seleccionado</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-white border border-gray-300 rounded"></div>
+                <span>Horarios disponibles</span>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}

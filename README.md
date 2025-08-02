@@ -14,7 +14,7 @@ Any changes you make to your deployed app will be automatically pushed to this r
 
 Your project is live at:
 
-**[https://vercel.com/alejopinattis-projects/v0-simple-salon-website](https://vercel.com/alejopinattis-projects/v0-simple-salon-website)**
+**[https://vercel.com/alejopinattis-projects/v0-simple-salon-website]([https://vercel.com/alejopinattis-projects/v0-simple-salon-website](https://vercel.com/alejopinattis-projects/pagina-peluqueria))**
 
 ## Build your app
 
